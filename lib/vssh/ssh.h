@@ -119,6 +119,13 @@ typedef enum {
 
 #define CURL_PATH_MAX 1024
 
+/* The most directory entries to handle in one go when listing an SFTP
+   directory. A server can send the entries faster than we handle them, so
+   the SSH library might never say it would block. Return to the multi
+   handle after this many, to have timeouts checked and other transfers
+   run. */
+#define SFTP_READDIR_MAX_ENTRIES 1000
+
 /* this struct is used in the HandleData struct which is part of the
    Curl_easy, which means this is used on a per-easy handle basis.
    Everything that is strictly related to a connection is banned from this
@@ -135,6 +142,7 @@ struct SSHPROTO {
 
   /* Here's a set of struct members used by the SFTP_READDIR state */
   LIBSSH2_SFTP_ATTRIBUTES readdir_attrs;
+  unsigned int readdir_count; /* entries handled since the last return */
 #endif
 };
 
@@ -168,6 +176,7 @@ struct ssh_conn {
   CURLcode actualcode;        /* the actual error code */
   char *readdir_linkPath;
   size_t readdir_len;
+  unsigned int readdir_count; /* entries handled since the last return */
   struct dynbuf readdir_buf;
 /* our variables */
   unsigned kbd_state; /* 0 or 1 */

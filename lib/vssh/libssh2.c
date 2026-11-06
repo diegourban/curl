@@ -1356,10 +1356,21 @@ static CURLcode sftp_readdir(struct Curl_easy *data,
                              bool *blockp)
 {
   CURLcode result = CURLE_OK;
-  int rc = libssh2_sftp_readdir_ex(sshc->sftp_handle,
-                                   sshp->readdir_filename, CURL_PATH_MAX,
-                                   sshp->readdir_longentry, CURL_PATH_MAX,
-                                   &sshp->readdir_attrs);
+  int rc;
+
+  if(sshp->readdir_count >= SFTP_READDIR_MAX_ENTRIES) {
+    /* leave the state machine to have timeouts checked and other transfers
+       run, continue the listing on the next round */
+    sshp->readdir_count = 0;
+    Curl_multi_mark_dirty(data);
+    *blockp = TRUE;
+    return result;
+  }
+
+  rc = libssh2_sftp_readdir_ex(sshc->sftp_handle,
+                               sshp->readdir_filename, CURL_PATH_MAX,
+                               sshp->readdir_longentry, CURL_PATH_MAX,
+                               &sshp->readdir_attrs);
   if(rc == LIBSSH2_ERROR_EAGAIN) {
     *blockp = TRUE;
     return result;
@@ -1367,6 +1378,7 @@ static CURLcode sftp_readdir(struct Curl_easy *data,
   if(rc > 0) {
     size_t readdir_len = (size_t)rc;
     sshp->readdir_filename[readdir_len] = '\0';
+    sshp->readdir_count++;
 
     if(data->set.list_only) {
       result = Curl_client_write(data, CLIENTWRITE_BODY,
@@ -2191,6 +2203,8 @@ static CURLcode ssh_state_sftp_readdir_init(struct Curl_easy *data,
     myssh_to(data, sshc, SSH_STOP);
     return CURLE_OK;
   }
+
+  sshp->readdir_count = 0;
 
   /*
    * This is a directory that we are trying to get, so produce a directory

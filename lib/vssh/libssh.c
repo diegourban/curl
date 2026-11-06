@@ -446,6 +446,8 @@ static int myssh_in_SFTP_READDIR_INIT(struct Curl_easy *data,
     return SSH_NO_ERROR;
   }
 
+  sshc->readdir_count = 0;
+
   /*
    * This is a directory that we are trying to get, so produce a directory
    * listing
@@ -469,12 +471,22 @@ static int myssh_in_SFTP_READDIR(struct Curl_easy *data,
 
   if(!sshp)
     return myssh_to_ERROR(data, sshc, CURLE_FAILED_INIT);
+
+  if(sshc->readdir_count >= SFTP_READDIR_MAX_ENTRIES) {
+    /* leave the state machine to have timeouts checked and other transfers
+       run, continue the listing on the next round */
+    sshc->readdir_count = 0;
+    Curl_multi_mark_dirty(data);
+    return SSH_AGAIN;
+  }
+
   curlx_dyn_reset(&sshc->readdir_buf);
   if(sshc->readdir_attrs)
     sftp_attributes_free(sshc->readdir_attrs);
 
   sshc->readdir_attrs = sftp_readdir(sshc->sftp_session, sshc->sftp_dir);
   if(sshc->readdir_attrs) {
+    sshc->readdir_count++;
     sshc->readdir_filename = sshc->readdir_attrs->name;
     sshc->readdir_longentry = sshc->readdir_attrs->longname;
     sshc->readdir_len = strlen(sshc->readdir_filename);

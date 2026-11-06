@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="US-ASCII"?>
+<testcase>
+<info>
+<keywords>
+SFTP
+directory
+</keywords>
+</info>
+
+#
+# The listing is checked by the postcheck, which replaces the output with
+# a verdict
+<reply>
+<datacheck>
+2500 entries listed
+</datacheck>
+</reply>
+
+<client>
+<server>
+sftp
+</server>
+<precheck>
+%PERL %SRCDIR/test613.pl prepare-many %PWD/%LOGDIR/test%TESTNUMBER.dir 2500
+</precheck>
+<name>
+SFTP directory listing with many entries, names only
+</name>
+<command>
+--list-only --key %LOGDIR/server/curl_client_key --pubkey %LOGDIR/server/curl_client_key.pub -u %USER: sftp://%HOSTIP:%SSHPORT%SFTP_PWD/%LOGDIR/test%TESTNUMBER.dir/ --insecure
+</command>
+</client>
+
+<verify>
+<postcheck>
+%PERL %SRCDIR/test613.pl postprocess-many %PWD/%LOGDIR/test%TESTNUMBER.dir 2500 %PWD/%LOGDIR/curl%TESTNUMBER.out
+</postcheck>
+# libssh allocates a line per entry
+<limits>
+Allocations: 5000
+</limits>
+</verify>
+</testcase>

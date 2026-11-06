@@ -30,7 +30,14 @@ use Time::Local;
 
 if($#ARGV < 1) {
     print "Usage: $0 prepare|postprocess directory [logfile]\n";
+    print "       $0 prepare-many directory count\n";
+    print "       $0 postprocess-many directory count logfile\n";
     exit 1;
+}
+
+# name of the many-files entry number $_[0]
+sub manyname {
+    return sprintf("f%05d", $_[0]);
 }
 
 # <precheck> expects an error message on stdout
@@ -158,6 +165,53 @@ elsif($ARGV[0] eq "postprocess") {
         rename $newfile, $logfile;
     }
 
+    exit 0;
+}
+elsif($ARGV[0] eq "prepare-many") {
+    # A directory with enough empty files to need more than one round of
+    # the SFTP directory listing state machine
+    my ($dirname, $count) = @ARGV[1..2];
+    mkdir $dirname or errout "$!";
+    for my $i (0 .. $count - 1) {
+        my $name = "$dirname/" . manyname($i);
+        open(FILE, ">", $name) or errout "$!";
+        close(FILE);
+    }
+    exit 0;
+}
+elsif($ARGV[0] eq "postprocess-many") {
+    # Check that the listing in the logfile names every file exactly once,
+    # in either the names-only or the long format, then replace the logfile
+    # with a one-line verdict that the test's datacheck compares.
+    my ($dirname, $count, $logfile) = @ARGV[1..3];
+
+    for my $i (0 .. $count - 1) {
+        unlink "$dirname/" . manyname($i);
+    }
+    rmdir $dirname or die "$!";
+
+    my @names;
+    open(IN, "<", $logfile) or die "$!";
+    while(<IN>) {
+        chomp;
+        s/\r$//;
+        # the name is the last word on the line in both formats
+        my $name = (split(/\s+/, $_))[-1];
+        next if(!defined($name) || $name eq "." || $name eq "..");
+        push @names, $name;
+    }
+    close(IN);
+
+    my @want = map { manyname($_) } (0 .. $count - 1);
+    my $got = join(",", sort @names);
+    my $verdict = ($got eq join(",", @want)) ?
+        "$count entries listed\n" :
+        sprintf("listing mismatch: %d entries, %d unique\n",
+                scalar(@names), scalar(keys %{{ map { $_ => 1 } @names }}));
+
+    open(OUT, ">", $logfile) or die "$!";
+    print OUT $verdict;
+    close(OUT);
     exit 0;
 }
 print "Unsupported command $ARGV[0]\n";
